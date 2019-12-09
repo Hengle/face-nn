@@ -13,9 +13,9 @@ import torch.distributed as dist
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from evaluate import *
-from loss import OhemCELoss
-from optimizer import Optimizer
+from faceparsing.evaluate import *
+from faceparsing.loss import OhemCELoss
+from faceparsing.optimizer import Optimizer
 
 respth = './res'
 if not osp.exists(respth):
@@ -34,7 +34,6 @@ def train():
     torch.cuda.set_device(args.local_rank)
     dist.init_process_group(backend='nccl', init_method='tcp://127.0.0.1:33241', world_size=torch.cuda.device_count(),
         rank=args.local_rank)
-    setup_logger(respth)
 
     # dataset
     n_classes = 19

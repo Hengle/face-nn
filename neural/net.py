@@ -5,90 +5,110 @@
 
 import atexit
 import socket
-import logging
-logger = logging.getLogger("nn-face")
+import json
+import utils
+import random
+import util.logit as log
 
 
 class Net(object):
     """
-    此模块用来和引擎通信
+    此模块用来和引擎通信 unity菜单栏：Tools->Connect
     使用udp在进程间通信，udp不保证时序性，也不保证引擎一定能收到
     """
-    def __init__(self, port1, port2):
+
+    def __init__(self, port, arguments):
+        """
+        net initial
+        :param port: udp 端口号
+        :param arguments: parse options
+        """
         atexit.register(self.close)
-        self._port1 = port1
-        self._port2 = port2
-        self._buffer_size = 1024
-        self._open_socket = False
-        self._open_send = False
-        self._loaded = False
-        self._bind = ("localhost", port1)
-        print("socket start, rcv port:"+str(port1)+"  send port:"+str(port2))
-
+        self.port = port
+        self.args = arguments
+        self.buffer_size = 1024
+        self.open = False
+        log.info("socket start,  port:" + str(port))
         try:
-            self._rcv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self._rcv_socket.bind(self._bind)
-            self._open_socket = True
-            data = self._rcv_socket.recvfrom(1024)
-            print("receive data")
-            print(data[0].decode('utf-8'))
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.bind = ("localhost", port)
+            self.open = True
         except Exception as e:
-            self._open_socket = False
             self.close()
-            logger.error(socket.error("socket error"+str(e.message)))
-            raise 
-
-        try:
-            self._snd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self._bind2 = ("localhost", port2)
-            self._open_send = True
-        except Exception as e:
-            self._snd_socket.close()
-            self._open_send = False
             raise
 
-    def send_recv(self, msg):
+    def send_params(self, param, name, step):
         """
-        发送之后 也接收
-        :param msg:
+        batch params
+        :param step: train step
+        :param param: torch.Tensor [batch, params_cnt]
+        :param name: list of name [batch]
         """
-        try:
-            msg = "rcv"+msg
-            self._snd_socket.sendto(msg.encode('utf-8'), self._bind2)
-            if msg != "quit":
-                self.recv()
-        except Exception as e:
-            logger.error(e.message)
-            raise 
+        list_ = param.cpu().detach().numpy().tolist()
+        cnt = len(list_)
+        for i in range(cnt):
+            self.send_param(list_[i], name[i][:-4] + "_" + str(step))  # name remove ext .jpg
 
-    def only_send(self, msg):
+    def send_param(self, param, name):
         """
-        只发送 不接收
-        :param msg:
+        发送参数给引擎
+        :param name: 图片名
+        :param param: 捏脸参数
         """
-        try:
-            self._snd_socket.sendto(msg.encode('utf-8'), self._bind2)
-            print("send success")
-        except Exception as e:
-            logger.error(e.message)
-            raise
+        shape = utils.curr_roleshape(self.args.path_to_dataset)
+        dic = {"shape": shape, "param": param, "name": name}
+        self._send('p', json.dumps(dic))
 
-    def recv(self):
-        try:
-            data = self._rcv_socket.recvfrom(self._buffer_size)
-            print("receive data")
-            print(data[0].decode('utf-8'))
-        except Exception as e:
-            logger.error(e.message)
-            raise
+    def send_message(self, message):
+        self._send('m', message)
+
+    def _send(self, cmd, message):
+        """
+        private method to send message
+        :param message: message body
+        """
+        if self.open:
+            try:
+                message = cmd + message
+                self.socket.sendto(message.encode('utf-8'), self.bind)
+            except Exception as e:
+                log.error(e)
+                raise
+        else:
+            log.warn("connect closed")
 
     def close(self):
         """
-        关闭连接
-        :return:
+        close connect
         """
-        print("socket close")
-        if self._open_socket:
-            self._rcv_socket.close()
-        if self._open_send:
-            self._snd_socket.close()
+        if self.open:
+            log.warn("socket close")
+            self._send('q', "-")  # quit
+            self.socket.close()
+            self.open = False
+
+
+if __name__ == '__main__':
+    from parse import parser
+    import logging
+
+    args = parser.parse_args()
+    log.init("FaceNeural", logging.INFO, log_path="./output/log.txt")
+    log.info(utils.curr_roleshape(args.path_to_dataset))
+
+    net = Net(args.udp_port, args)
+
+    while True:
+        r_input = input("command: ")
+        if r_input == "m":
+            net.send_message("hello world")
+        elif r_input == "p":
+            params = utils.random_params(args.params_cnt)
+            net.send_param(params, str(random.randint(1000, 9999)))
+        elif r_input == "q":
+            net.close()
+            break
+        else:
+            log.error("unknown code, quit")
+            net.close()
+            break

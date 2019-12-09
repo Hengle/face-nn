@@ -1,5 +1,6 @@
 ﻿using CFUtilPoolLib;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -34,23 +35,23 @@ namespace XEngine.Editor
                 {
                     ScriptableObject.DestroyImmediate(preview);
                 }
-                var window = EditorWindow.GetWindowWithRect(typeof(FashionPreview), new Rect(0, 0, 440, 640), true, "Preview");
+                var window = EditorWindow.GetWindowWithRect(typeof(FashionPreview), new Rect(0, 0, 440, 730), true, XEditorUtil.Config.preview);
                 preview = window as FashionPreview;
                 preview.Show();
             }
         }
 
-        public void NeuralProcess(NeuralData data)
+        public void NeuralProcess(NeuralData data, bool complete)
         {
             OnEnable();
             this.shape = data.shape;
-            CreateAvatar();
+            bool isnew = CreateAvatar();
             suit_select = UnityEngine.Random.Range(0, fashionInfo.Length - 1);
-            DrawSuit();
+            DrawSuit(isnew, complete);
             Update();
             bone.NeuralProcess(data.boneArgs);
-            paint.NeuralProcess();
-            data.callback(data.name);
+            paint.NeuralProcess(data.paintArgs);
+            data.callback(data.name, data.shape);
         }
 
         private void OnEnable()
@@ -60,7 +61,7 @@ namespace XEngine.Editor
             shape = RoleShape.FEMALE;
             if (fData == null)
             {
-                fData = AssetDatabase.LoadAssetAtPath<FaceData>("Assets/BundleRes/Config/FaceData.asset");
+                fData = AssetDatabase.LoadAssetAtPath<FaceData>("Assets/Resource/Config/FaceData.asset");
             }
             if (paint == null)
             {
@@ -76,20 +77,9 @@ namespace XEngine.Editor
         void OnGUI()
         {
             GUILayout.BeginVertical();
-            GUILayout.Label(XEditorUtil.Config.suit_pre, XEditorUtil.titleLableStyle);
-            GUILayout.Space(8);
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Role Shape");
-            shape = (RoleShape)EditorGUILayout.EnumPopup(shape);
-            GUILayout.EndHorizontal();
             GUILayout.Space(4);
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Select Clip");
-            clip = (AnimationClip)EditorGUILayout.ObjectField(clip, typeof(AnimationClip), true);
-            GUILayout.EndHorizontal();
-            GUILayout.Space(4);
+            shape = (RoleShape)EditorGUILayout.EnumPopup("Gender", shape);
+            clip = (AnimationClip)EditorGUILayout.ObjectField("Clip    ", clip, typeof(AnimationClip), true);
 
             if (go == null || (go != null && go.name != shape.ToString()) || shape.ToString() != go.name)
             {
@@ -97,53 +87,80 @@ namespace XEngine.Editor
             }
             if (fashionInfo != null)
             {
-                GUILayout.BeginHorizontal();
-                GUILayout.Label("Select Suit");
-                suit_select = EditorGUILayout.Popup(suit_select, fashionDesInfo);
+                suit_select = EditorGUILayout.Popup("Suit    ", suit_select, fashionDesInfo);
                 if (suit_pre != suit_select || shape != shape_pre)
                 {
-                    DrawSuit();
+                    DrawSuit(true, true);
                     suit_pre = suit_select;
                     shape_pre = shape;
                 }
-                GUILayout.EndHorizontal();
             }
             GUILayout.EndVertical();
+            GUILayout.Space(12);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Sync-Picture", GUILayout.Width(120)))
+            {
+                string name = "";
+                float[] args = new float[NeuralInterface.CNT];
+                float[] args2 = new float[NeuralInterface.CNT2];
+                if (NeuralInterface.ParseFromPicture(ref args, ref args2, ref name))
+                {
+                    bone.NeuralProcess(args);
+                    paint.NeuralProcess(args2);
+                }
+            }
+            if (GUILayout.Button("Sync-Model", GUILayout.Width(120)))
+            {
+                string file = UnityEditor.EditorUtility.OpenFilePanel("Select model file", NeuralInterface.MODEL, "bytes");
+                if (!string.IsNullOrEmpty(file))
+                {
+                    FileInfo info = new FileInfo(file);
+                    float[] args, args2;
+                    NeuralInterface.ProcessFile(info, out args, out args2);
+                    bone.NeuralProcess(args);
+                    paint.NeuralProcess(args2);
+                }
+            }
+            GUILayout.EndHorizontal();
             paint.OnGui();
             bone.OnGui();
         }
 
-        private void CreateAvatar()
+        private bool CreateAvatar()
         {
-            XEditorUtil.ClearCreatures();
-
-            List<int> list = new List<int>();
-            var table = XFashionLibrary._profession.Table;
-            presentid = table.Where(x => x.Shape == (int)shape).Select(x => x.PresentID).First();
-            string path = "Assets/BundleRes/Prefabs/Player_" + shape.ToString().ToLower() + ".prefab";
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            if (prefab != null)
+            if (go == null || go.name != shape.ToString())
             {
-                GameObject root = GameObject.Find("Player");
-                if (root == null)
+                XEditorUtil.ClearCreatures();
+                List<int> list = new List<int>();
+                var table = XFashionLibrary._profession.Table;
+                presentid = table.Where(x => x.Shape == (int)shape).Select(x => x.PresentID).First();
+                string path = "Assets/Resource/Prefabs/Player_" + shape.ToString().ToLower() + ".prefab";
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab != null)
                 {
-                    root = new GameObject("Player");
-                    root.transform.position = new Vector3(0f, 0f, -8f);
+                    GameObject root = GameObject.Find("Player");
+                    if (root == null)
+                    {
+                        root = new GameObject("Player");
+                        root.transform.position = new Vector3(0f, 0f, -8f);
+                    }
+                    go = Instantiate(prefab);
+                    go.transform.SetParent(root.transform);
+                    go.name = shape.ToString();
+                    go.transform.localScale = Vector3.one;
+                    go.transform.rotation = Quaternion.Euler(0, 180, 0);
+                    go.transform.localPosition = Vector3.zero;
+                    Selection.activeGameObject = go;
+                    fashionInfo = XFashionLibrary.GetFashionsInfo(shape);
+                    fashionDesInfo = new string[fashionInfo.Length];
+                    for (int i = 0; i < fashionInfo.Length; i++)
+                    {
+                        fashionDesInfo[i] = fashionInfo[i].name;
+                    }
                 }
-                go = Instantiate(prefab);
-                go.transform.SetParent(root.transform);
-                go.name = shape.ToString();
-                go.transform.localScale = Vector3.one;
-                go.transform.rotation = Quaternion.Euler(0, 180, 0);
-                go.transform.localPosition = Vector3.zero;
-                Selection.activeGameObject = go;
-                fashionInfo = XFashionLibrary.GetFashionsInfo(shape);
-                fashionDesInfo = new string[fashionInfo.Length];
-                for (int i = 0; i < fashionInfo.Length; i++)
-                {
-                    fashionDesInfo[i] = fashionInfo[i].name;
-                }
+                return true;
             }
+            return false;
         }
 
 
@@ -159,13 +176,16 @@ namespace XEngine.Editor
             }
         }
 
-        private void DrawSuit()
+        private void DrawSuit(bool initial, bool complete)
         {
-            if (fashionInfo.Length <= suit_select) suit_select = 0;
-            FashionSuit.RowData rowData = fashionInfo[suit_select];
-            FashionUtility.DrawSuit(go, rowData, (uint)presentid, 1);
-            paint.Initial(go, shape);
-            bone.Initial(go, shape);
+            if (initial)
+            {
+                if (fashionInfo.Length <= suit_select) suit_select = 0;
+                FashionSuit.RowData rowData = fashionInfo[suit_select];
+                FashionUtility.DrawSuit(go, rowData, (uint)presentid, 1, complete);
+                paint.Initial(go, shape);
+                bone.Initial(go, shape);
+            }
         }
 
         private void PlayAnim()

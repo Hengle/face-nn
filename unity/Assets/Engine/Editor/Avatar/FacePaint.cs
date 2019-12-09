@@ -17,11 +17,7 @@ namespace XEngine.Editor
         FaceData data;
         RoleShape roleShape;
         Texture2D mainTex;
-        Texture2D tex1;
-        Texture2D tex2;
-        Texture2D tex3;
-        Texture2D tex4;
-        Texture2D tex5;
+        Texture2D tex1, tex2, tex3, tex4, tex5;
         Color color1 = Color.gray;
         Color color2 = Color.gray;
         Color color3 = Color.gray;
@@ -34,12 +30,14 @@ namespace XEngine.Editor
         Vector3 rotScale = new Vector3(0, 1, 1);
 
         RenderTexture mainRt;
-        Material mat, outputMat;
+        static Material mat;
+        Material outputMat;
 
         GameObject helmet;
         Camera camera;
         Vector3 cam1 = new Vector3(0, 1.0f, -10.0f);
-        Vector3 cam2 = new Vector3(0, 1.72f, -8.8f);
+        Vector3 cam2 = new Vector3(0, 1.72f, -8.7f);
+        Vector3 cam3 = new Vector3(0, 1.72f, -8.6f);
         bool focusFace;
 
         public FacePaint(FaceData dt)
@@ -50,18 +48,19 @@ namespace XEngine.Editor
 
         public void Initial(GameObject go, RoleShape shape)
         {
-            mat = AssetDatabase.LoadAssetAtPath<Material>("Assets/BundleRes/MatShader/FaceMakeup.mat");
+            if (mat == null) mat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Resource/RawData/FaceMakeup.mat");
             string child = "Player_" + shape.ToString().ToLower() + "_face";
             Transform face = go.transform.Find(child);
             var skr = face.gameObject.GetComponent<SkinnedMeshRenderer>();
             child = "Player_" + shape.ToString().ToLower() + "_helmet";
             helmet = go.transform.Find(child).gameObject;
-            camera = GameObject.FindObjectOfType<Camera>();
             outputMat = skr.sharedMaterial;
             roleShape = shape;
-            FecthMainTex();
-            CreateRT();
+            if (camera == null) camera = GameObject.FindObjectOfType<Camera>();
+            if (mainTex == null) FecthMainTex();
+            if (mainRt == null) CreateRT();
             Update();
+            EditorSceneManager.sceneClosed -= OnSceneClose;
             EditorSceneManager.sceneClosed += OnSceneClose;
         }
 
@@ -135,12 +134,31 @@ namespace XEngine.Editor
             }
         }
 
+        private int MaxIndex(float[] args, int start, int len)
+        {
+            int r = 0; float tmp = args[start];
+            for (int i = 1; i < len; i++)
+            {
+                if (args[start + i] > tmp)
+                {
+                    tmp = args[start + i];
+                    r = i;
+                }
+            }
+            return r;
+        }
+
+        private void ParseArgs(float[] args)
+        {
+            iBrow = MaxIndex(args, 1, 3);
+            float s = args[0] * 0.6f + 0.2f;
+            color1 = Color.white * s;
+        }
+
         public void OnGui()
         {
             AnlyData();
             GUILayout.BeginVertical();
-            GUILayout.Space(16);
-            GUILayout.Label("Face Paint");
             focusFace = GUILayout.Toggle(focusFace, " focus face");
             GuiItem("brew ", brows, ref iBrow, ref color1);
             GuiItem("eye  ", eyes, ref iEye, ref color2);
@@ -164,9 +182,10 @@ namespace XEngine.Editor
             GUILayout.EndHorizontal();
         }
 
-        public void NeuralProcess()
+        public void NeuralProcess(float[] args)
         {
             AnlyData();
+            ParseArgs(args);
             UpdatePainTex();
             UpdateHsv();
             FocusFace();
@@ -202,8 +221,9 @@ namespace XEngine.Editor
             if (helmet != null && camera != null)
             {
                 helmet.SetActive(!focusFace);
-                camera.transform.position = focusFace ? cam2 : cam1;
-                camera.fieldOfView = focusFace ? 21 : 60;
+                var cam = roleShape == RoleShape.FEMALE ? cam3 : cam2;
+                camera.transform.position = focusFace ? cam : cam1;
+                camera.fieldOfView = focusFace ? 18 : 60;
             }
         }
 
@@ -233,7 +253,7 @@ namespace XEngine.Editor
 
         private Texture2D GetPaintTex(string name, RoleShape shape)
         {
-            string path = "Assets/BundleRes/Knead/" + name + "_" + shape.ToString().ToLower() + ".tga";
+            string path = "Assets/Resource/Knead/" + name + "_" + shape.ToString().ToLower() + ".tga";
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 

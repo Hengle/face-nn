@@ -240,16 +240,19 @@ namespace XEngine.Editor
 
         public void Initial(GameObject go, RoleShape shape)
         {
-            RoleParts = go.GetComponent<XRoleParts>();
-            string path = "Assets/BundleRes/Config/" + shape.ToString().ToLower();
-            TextAsset ta = AssetDatabase.LoadAssetAtPath<TextAsset>(path + ".bytes");
-            if (ta != null)
+            if (RoleParts == null)
             {
-                MemoryStream ms = new MemoryStream(ta.bytes);
-                fbData = new FaceBoneDatas(ms);
-                CleanData();
-                MakeControlGroups();
-                ms.Close();
+                RoleParts = go.GetComponent<XRoleParts>();
+                string path = "Assets/Resource/Config/" + shape.ToString().ToLower();
+                TextAsset ta = AssetDatabase.LoadAssetAtPath<TextAsset>(path + ".bytes");
+                if (ta != null)
+                {
+                    MemoryStream ms = new MemoryStream(ta.bytes);
+                    fbData = new FaceBoneDatas(ms);
+                    CleanData();
+                    MakeControlGroups();
+                    ms.Close();
+                }
             }
         }
 
@@ -403,12 +406,12 @@ namespace XEngine.Editor
 
         public void OnGui()
         {
-            GUILayout.Space(16);
+            GUILayout.Space(10);
             int len1 = data.headData.Length;
             int len2 = data.senseData.Length;
             int cnt = len1 + len2;
             if (folds == null) folds = new bool[cnt];
-            if (icons == null) icons = new Object[cnt];
+            if (icons == null) icons = new Object[cnt];     
             rect = GUILayout.BeginScrollView(rect);
             for (int i = 0; i < len1; i++)
             {
@@ -466,6 +469,8 @@ namespace XEngine.Editor
             EditorGUILayout.EndHorizontal();
             ix++;
         }
+
+       
 
         private void ProcessKneadBone(int groupId, float weight)
         {

@@ -10,8 +10,7 @@ namespace XEngine.Editor
 
     public class XEditorConfig
     {
-        public string suit_pre;
-        public string suit_shape;
+        public string preview;
         public string[] faceType;
         public string[] facev2Type;
     }
@@ -20,7 +19,7 @@ namespace XEngine.Editor
     public class XEditorUtil
     {
         public static XEditorConfig _config;
-        public readonly static string uiFace = @"Assets/BundleRes/Faceicon/";
+        public readonly static string uiFace = @"Assets/Resource/Faceicon/";
 
         public static XEditorConfig Config
         {
@@ -41,8 +40,7 @@ namespace XEngine.Editor
             {
                 _config = new XEditorConfig();
                 StreamReader reader = new StreamReader(fs, Encoding.UTF8);
-                _config.suit_pre = reader.ReadLine();
-                _config.suit_shape = reader.ReadLine();
+                _config.preview = reader.ReadLine();
                 int cnt = (int)FaceValueType.None;
                 _config.faceType = new string[cnt];
                 for (int i = 0; i < cnt; i++)
@@ -68,14 +66,6 @@ namespace XEngine.Editor
             else
             {
                 SetupEnv();
-
-                GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
-                plane.name = "Ground";
-                plane.layer = LayerMask.NameToLayer("Terrain");
-                plane.transform.position = new Vector3(0, -0.01f, 0);
-                plane.transform.localScale = new Vector3(1000, 1, 1000);
-                plane.GetComponent<Renderer>().sharedMaterial = new Material(Shader.Find("Diffuse"));
-                plane.GetComponent<Renderer>().sharedMaterial.SetColor("_Color", new Color(90 / 255.0f, 90 / 255.0f, 90 / 255.0f));
                 return true;
             }
         }
@@ -94,6 +84,7 @@ namespace XEngine.Editor
             var env = cam.GetComponent<XEngine.Environment>();
             env.roleLight0 = light;
             env.envCube = AssetDatabase.LoadAssetAtPath<Cubemap>("Assets/Engine/Editor/EditorResources/Env_0_CubeLDR.tga");
+            cam.GetComponent<Camera>().clearFlags = CameraClearFlags.SolidColor;
         }
 
         public static void ClearCreatures()
